@@ -5,7 +5,6 @@ library(rsconnect)
 
 y <- read_rds("shinydata")
 
-z <- as.list(unique(y$state))
 # Define UI for dataset viewer app ----
 ui <- fluidPage(
   
