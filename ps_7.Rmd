@@ -1,0 +1,104 @@
+---
+title: "ps_7"
+author: "Saiyaz Kazi"
+date: "11/22/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(fs)
+library(knitr)
+```
+
+```{r echo=FALSE, include=FALSE}
+
+download.file(url = "https://goo.gl/ZRCBda",
+
+              destfile = "master.zip",
+
+              quiet = TRUE,
+
+              mode = "wb")
+
+
+
+unzip("master.zip")
+
+x <- fs::dir_ls("2018-live-poll-results-master/data") %>%
+
+  map_dfr(read_csv, .id = "source") %>%
+   select(source, response, likely, final_weight) %>% 
+    mutate(state = toupper(str_sub(source, 51, 52))) %>% 
+  mutate(wave = str_extract(source, pattern = "[\\d].csv$")) %>% 
+
+  mutate(wave = parse_integer(str_sub(wave, 1, 1))) %>% 
+  mutate(office = case_when(
+
+                      str_detect(source, pattern = "sen") ~ "SEN",
+
+                      str_detect(source, pattern = "gov") ~ "GOV",
+
+                      TRUE ~ "HSE")) %>% 
+mutate(district = str_extract(source, pattern = "[\\d]{2}-[\\d].csv$")) %>% 
+
+  mutate(district = parse_integer(str_sub(district, 1, 2))) %>% 
+   mutate(District = paste(state, district, sep = "-")) %>% 
+
+  mutate(District = ifelse(is.na(district), NA, District)) %>% 
+
+  mutate(Office = ifelse(is.na(district), paste(state, office, sep = "-"), District)) 
+
+file_delete(c("master.zip", "2018-live-poll-results-master"))
+
+two_waves <- x %>% 
+
+  group_by(Office) %>% 
+
+  summarize(waves = n_distinct(wave),
+
+            first_wave = min(wave)) %>% 
+
+  filter(waves > 1) 
+
+forecasts <- anti_join(x, two_waves, 
+
+                       by = c("Office" = "Office", "wave" = "first_wave")) %>% 
+  
+  mutate(rep = ifelse(response == "Rep", final_weight, 0)) %>% 
+
+  mutate(dem = ifelse(response == "Dem", final_weight, 0)) %>%
+
+  group_by(Office, office) %>% 
+
+  summarize(rep_adv = (sum(rep) - sum(dem)) / n()) 
+
+results <- read_csv("mt_2_results.csv") %>% 
+  mutate(district_number = parse_integer(district, na = c("AL", "sen", "gov"))) %>% 
+
+  mutate(district_office = case_when(str_detect(district, "sen") ~ "SEN",
+
+                                     str_detect(district, "gov") ~ "GOV",
+
+                                     TRUE ~ NA_character_)) %>% 
+
+  mutate(Office = ifelse(is.na(district_number), 
+
+                         paste(state, district_office, sep = "-"),
+
+                         paste(state, district_number, sep = "-")))
+
+stopifnot(all(forecasts$Office %in% results$Office))
+
+shiny_data <- left_join(forecasts, results, by = "Office") %>% 
+
+  mutate(result = (rep_votes - dem_votes) / (rep_votes + dem_votes + other_votes)) %>% 
+
+  rename(forecast = rep_adv) %>% 
+
+  select(Office, office, state, forecast, result, win_name, win_party) %>% 
+  write_rds("shinydata")
+
+```
+
