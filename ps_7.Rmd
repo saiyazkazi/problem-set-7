@@ -100,5 +100,6 @@ shiny_data <- left_join(forecasts, results, by = "Office") %>%
   select(Office, office, state, forecast, result, win_name, win_party) %>% 
   write_rds("shinydata")
 
+## The code above was graciously adopted from the midterm solutions code guide. I used it to inspire my shiny app.
 ```
 
